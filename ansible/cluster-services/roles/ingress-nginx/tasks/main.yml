@@ -1,0 +1,33 @@
+---
+- name: Create namespace for ingress controller
+  kubernetes.core.k8s:
+    api_version: v1
+    kind: Namespace
+    name: "{{ ingress_namespace }}"
+    state: present
+
+- name: Add ingress-nginx Helm repo
+  community.kubernetes.helm_repository:
+    name: ingress-nginx
+    repo_url: "{{ ingress_chart_repo }}"
+
+- name: Install ingress-nginx controller
+  community.kubernetes.helm:
+    name: "{{ ingress_release_name }}"
+    chart_ref: ingress-nginx/ingress-nginx
+    release_namespace: "{{ ingress_namespace }}"
+    create_namespace: false
+    values:
+      controller:
+        hostPort:
+          enabled: true
+          ports:
+            https: 443
+        http:
+          enabled: false
+        service:
+          type: ClusterIP
+    wait: true
+    update_repo_cache: true
+    chart_version: "{{ ingress_chart_version }}"
+

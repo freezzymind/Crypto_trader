@@ -1,0 +1,5 @@
+pgadmin_namespace: dashboards
+pgadmin_release_name: pgadmin
+pgadmin_chart_repo: https://rowanruseler.github.io/helm-charts
+pgadmin_chart_version: "1.22.2"  # Совместим с Kubernetes 1.25+, поддерживает secrets через existingSecret
+pgadmin_ingress_host: pgadmin.local

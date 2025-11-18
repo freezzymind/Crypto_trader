@@ -1,0 +1,11 @@
+---
+- name: Install additional services
+  hosts: master
+  roles:
+    - helm
+    - ingress-nginx
+    - cert-manager
+    - rancher
+    - pgadmin
+    - monitoring-stack
+    - metrics-server

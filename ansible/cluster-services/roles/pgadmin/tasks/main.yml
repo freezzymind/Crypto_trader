@@ -1,0 +1,50 @@
+---
+- name: Add Helm repo for pgAdmin
+  community.kubernetes.helm_repository:
+    name: pgadmin
+    repo_url: "{{ pgadmin_chart_repo }}"
+
+- name: Create namespace for dashboards (if not exists)
+  kubernetes.core.k8s:
+    api_version: v1
+    kind: Namespace
+    name: "{{ pgadmin_namespace }}"
+    state: present
+
+- name: Create Kubernetes Secret for PgAdmin credentials
+  kubernetes.core.k8s:
+    state: present
+    definition:
+      apiVersion: v1
+      kind: Secret
+      metadata:
+        name: pgadmin-secret
+        namespace: "{{ pgadmin_namespace }}"
+      type: Opaque
+      data:
+        PGADMIN_DEFAULT_EMAIL: "{{ pgadmin_email | b64encode }}"
+        PGADMIN_DEFAULT_PASSWORD: "{{ pgadmin_password | b64encode }}"
+
+- name: Deploy pgAdmin via Helm
+  community.kubernetes.helm:
+    name: "{{ pgadmin_release_name }}"
+    chart_ref: pgadmin/pgadmin4
+    release_namespace: "{{ pgadmin_namespace }}"
+    create_namespace: false
+    values:
+      env:
+        existingSecret: pgadmin-secret
+      ingress:
+        enabled: true
+        ingressClassName: nginx
+        annotations:
+          cert-manager.io/cluster-issuer: selfsigned-clusterissuer
+        hosts:
+          - host: "{{ pgadmin_ingress_host }}"
+            paths:
+              - path: /
+                pathType: Prefix
+        tls:
+          - hosts:
+              - "{{ pgadmin_ingress_host }}"
+            secretName: pgadmin-tls

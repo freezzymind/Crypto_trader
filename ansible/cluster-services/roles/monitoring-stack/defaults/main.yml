@@ -1,0 +1,5 @@
+monitoring_namespace: dashboards
+monitoring_release_name: monitoring
+monitoring_chart_version: "56.6.2"  # Включает Prometheus Operator 0.74 и Grafana 10.x, стабильно работает
+grafana_ingress_host: grafana.local
+prometheus_ingress_host: prometheus.local

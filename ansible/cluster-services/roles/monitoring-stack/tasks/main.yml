@@ -1,0 +1,106 @@
+---
+- name: Add kube-prometheus-stack Helm repo
+  community.kubernetes.helm_repository:
+    name: prometheus-community
+    repo_url: https://prometheus-community.github.io/helm-charts
+
+- name: Create namespace for monitoring stack
+  kubernetes.core.k8s:
+    api_version: v1
+    kind: Namespace
+    name: "{{ monitoring_namespace }}"
+    state: present
+
+- name: Create Grafana admin credentials secret
+  kubernetes.core.k8s:
+    state: present
+    definition:
+      apiVersion: v1
+      kind: Secret
+      metadata:
+        name: grafana-admin-credentials
+        namespace: "{{ monitoring_namespace }}"
+      type: Opaque
+      data:
+        admin-user: "{{ grafana_admin_user | b64encode }}"
+        admin-password: "{{ grafana_admin_password | b64encode }}"
+  no_log: true
+
+- name: Ensure apache2-utils is installed
+  ansible.builtin.apt:
+    name: apache2-utils
+    state: present
+
+- name: Generate htpasswd string for Prometheus
+  ansible.builtin.htpasswd:
+    path: /tmp/prometheus.htpasswd
+    name: "{{ prometheus_basic_auth_user }}"
+    password: "{{ prometheus_basic_auth_password }}"
+    crypt_scheme: bcrypt
+  no_log: true
+
+- name: Read htpasswd content
+  ansible.builtin.slurp:
+    src: /tmp/prometheus.htpasswd
+  register: htpasswd_raw
+  no_log: true
+
+- name: Remove temporary htpasswd file
+  ansible.builtin.file:
+    path: /tmp/prometheus.htpasswd
+    state: absent
+
+- name: Create Kubernetes Secret for Prometheus basic auth
+  kubernetes.core.k8s:
+    state: present
+    definition:
+      apiVersion: v1
+      kind: Secret
+      metadata:
+        name: prometheus-basic-auth
+        namespace: "{{ monitoring_namespace }}"
+      type: Opaque
+      data:
+        auth: "{{ htpasswd_raw.content }}"
+  no_log: true
+
+- name: Deploy kube-prometheus-stack
+  community.kubernetes.helm:
+    name: "{{ monitoring_release_name }}"
+    chart_ref: prometheus-community/kube-prometheus-stack
+    release_namespace: "{{ monitoring_namespace }}"
+    create_namespace: false
+    values:
+      grafana:
+        ingress:
+          enabled: true
+          ingressClassName: nginx
+          annotations:
+            cert-manager.io/cluster-issuer: selfsigned-clusterissuer
+          hosts:
+            - "{{ grafana_ingress_host }}"
+          tls:
+            - hosts:
+                - "{{ grafana_ingress_host }}"
+              secretName: grafana-tls
+        admin:
+          existingSecret: grafana-admin-credentials
+      prometheus:
+        ingress:
+          enabled: true
+          ingressClassName: nginx
+          annotations:
+            cert-manager.io/cluster-issuer: selfsigned-clusterissuer
+            nginx.ingress.kubernetes.io/auth-type: basic
+            nginx.ingress.kubernetes.io/auth-secret: prometheus-basic-auth
+            nginx.ingress.kubernetes.io/auth-realm: "Authentication Required"
+          hosts:
+            - "{{ prometheus_ingress_host }}"
+          tls:
+            - hosts:
+                - "{{ prometheus_ingress_host }}"
+              secretName: prometheus-tls
+    wait: true
+    timeout: "300s"
+    update_repo_cache: true
+    chart_version: "{{ monitoring_chart_version }}"
